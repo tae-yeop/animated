@@ -1,25 +1,35 @@
 # Adapted from https://github.com/huggingface/diffusers/blob/main/src/diffusers/models/resnet.py
 
+from typing import Optional
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 from einops import rearrange
+from torch import Tensor, nn
 
 
 class InflatedConv3d(nn.Conv2d):
-    def forward(self, x):
-        video_length = x.shape[2]
+    def forward(self, x: Tensor) -> Tensor:
+        frames = x.shape[2]
 
         x = rearrange(x, "b c f h w -> (b f) c h w")
-        x = super().forward(x)
-        x = rearrange(x, "(b f) c h w -> b c f h w", f=video_length)
-
+        x = F.conv2d(x, self.weight, self.bias, self.stride, self.padding, self.dilation, self.groups)
+        x = rearrange(x, "(b f) c h w -> b c f h w", f=frames)
         return x
 
 
+
 class Upsample3D(nn.Module):
-    def __init__(self, channels, use_conv=False, use_conv_transpose=False, out_channels=None, name="conv"):
+    def __init__(
+        self,
+        channels: int,
+        use_conv: bool = False,
+        use_conv_transpose: bool = False,
+        out_channels: Optional[int] = None,
+        name="conv",
+    ):
         super().__init__()
         self.channels = channels
         self.out_channels = out_channels or channels
@@ -27,13 +37,12 @@ class Upsample3D(nn.Module):
         self.use_conv_transpose = use_conv_transpose
         self.name = name
 
-        conv = None
         if use_conv_transpose:
             raise NotImplementedError
         elif use_conv:
             self.conv = InflatedConv3d(self.channels, self.out_channels, 3, padding=1)
 
-    def forward(self, hidden_states, output_size=None):
+    def forward(self, hidden_states: Tensor, output_size=None):
         assert hidden_states.shape[1] == self.channels
 
         if self.use_conv_transpose:
@@ -59,18 +68,20 @@ class Upsample3D(nn.Module):
         if dtype == torch.bfloat16:
             hidden_states = hidden_states.to(dtype)
 
-        # if self.use_conv:
-        #     if self.name == "conv":
-        #         hidden_states = self.conv(hidden_states)
-        #     else:
-        #         hidden_states = self.Conv2d_0(hidden_states)
         hidden_states = self.conv(hidden_states)
 
         return hidden_states
 
 
 class Downsample3D(nn.Module):
-    def __init__(self, channels, use_conv=False, out_channels=None, padding=1, name="conv"):
+    def __init__(
+        self,
+        channels: int,
+        use_conv: bool = False,
+        out_channels: Optional[int] = None,
+        padding: int = 1,
+        name="conv",
+    ):
         super().__init__()
         self.channels = channels
         self.out_channels = out_channels or channels
@@ -126,7 +137,7 @@ class ResnetBlock3D(nn.Module):
         if groups_out is None:
             groups_out = groups
 
-        self.norm1 = torch.nn.GroupNorm(num_groups=groups, num_channels=in_channels, eps=eps, affine=True)
+        self.norm1 = nn.GroupNorm(num_groups=groups, num_channels=in_channels, eps=eps, affine=True)
 
         self.conv1 = InflatedConv3d(in_channels, out_channels, kernel_size=3, stride=1, padding=1)
 
@@ -138,12 +149,12 @@ class ResnetBlock3D(nn.Module):
             else:
                 raise ValueError(f"unknown time_embedding_norm : {self.time_embedding_norm} ")
 
-            self.time_emb_proj = torch.nn.Linear(temb_channels, time_emb_proj_out_channels)
+            self.time_emb_proj = nn.Linear(temb_channels, time_emb_proj_out_channels)
         else:
             self.time_emb_proj = None
 
-        self.norm2 = torch.nn.GroupNorm(num_groups=groups_out, num_channels=out_channels, eps=eps, affine=True)
-        self.dropout = torch.nn.Dropout(dropout)
+        self.norm2 = nn.GroupNorm(num_groups=groups_out, num_channels=out_channels, eps=eps, affine=True)
+        self.dropout = nn.Dropout(dropout)
         self.conv2 = InflatedConv3d(out_channels, out_channels, kernel_size=3, stride=1, padding=1)
 
         if non_linearity == "swish":
@@ -153,7 +164,9 @@ class ResnetBlock3D(nn.Module):
         elif non_linearity == "silu":
             self.nonlinearity = nn.SiLU()
 
-        self.use_in_shortcut = self.in_channels != self.out_channels if use_in_shortcut is None else use_in_shortcut
+        self.use_in_shortcut = (
+            self.in_channels != self.out_channels if use_in_shortcut is None else use_in_shortcut
+        )
 
         self.conv_shortcut = None
         if self.use_in_shortcut:
@@ -192,6 +205,6 @@ class ResnetBlock3D(nn.Module):
         return output_tensor
 
 
-class Mish(torch.nn.Module):
+class Mish(nn.Module):
     def forward(self, hidden_states):
         return hidden_states * torch.tanh(torch.nn.functional.softplus(hidden_states))

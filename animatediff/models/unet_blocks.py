@@ -1,5 +1,7 @@
 # Adapted from https://github.com/huggingface/diffusers/blob/main/src/diffusers/models/unet_2d_blocks.py
 
+from typing import Any, Dict, Optional, Tuple, Union
+
 import torch
 from torch import nn
 
@@ -7,7 +9,7 @@ from .attention import Transformer3DModel
 from .resnet import Downsample3D, ResnetBlock3D, Upsample3D
 from .motion_module import get_motion_module
 
-import pdb
+
 
 def get_down_block(
     down_block_type,
@@ -224,7 +226,6 @@ class UNetMidBlock3DCrossAttn(nn.Module):
                     norm_num_groups=resnet_groups,
                     use_linear_projection=use_linear_projection,
                     upcast_attention=upcast_attention,
-
                     unet_use_cross_frame_attention=unet_use_cross_frame_attention,
                     unet_use_temporal_attention=unet_use_temporal_attention,
                 )
