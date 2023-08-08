@@ -25,6 +25,8 @@ from diffusers.utils.import_utils import is_xformers_available
 from safetensors import safe_open
 from pathlib import Path
 
+from diffusers.utils import load_image
+
 
 def main (args):
     *_, func_args = inspect.getargvalues(inspect.currentframe())
@@ -73,6 +75,11 @@ def main (args):
 
     config  = OmegaConf.load(args.config)
     samples = []
+
+    # refernce img
+    input_image = load_image(args.ref)
+    # load_image("/purestorage/project/tyk/project14/reference_only/Save-Grass-Dogs-hero850.jpg")
+
 
     sample_idx = 0
     for model_idx, (config_key, model_config) in enumerate(list(config.items())):
@@ -156,6 +163,10 @@ def main (args):
                     width               = args.W,
                     height              = args.H,
                     video_length        = args.L,
+                    ref_image=input_image,
+                    style_fidelity=args.style_fidelity,
+                    reference_attn = args.reference_attn,
+                    reference_adain = args.reference_adain,
                 ).videos
                 samples.append(sample)
 
@@ -175,6 +186,10 @@ if __name__ == "__main__":
     parser.add_argument("--pretrained_model_path", type=str, default="models/StableDiffusion/stable-diffusion-v1-5",)
     parser.add_argument("--inference_config",      type=str, default="configs/inference/inference.yaml")    
     parser.add_argument("--config",                type=str, required=True)
+    parser.add_argument("--ref", type=str, required=True)
+    parser.add_argument("--style_fidelity", type=float, default=0.5)
+    parser.add_argument("--reference_attn", type=bool, default=True)
+    parser.add_argument("--reference_adain", type=bool, default=False)
 
     parser.add_argument("--L", type=int, default=16 )
     parser.add_argument("--W", type=int, default=512)
